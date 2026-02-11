@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const axios = require('axios');
 
 const app = express();
 const port = 3000;
@@ -170,6 +171,68 @@ app.get('/generate-token', (req, res) => {
     // VULNERABLE: MD5 is considered broken for security purposes
     const token = crypto.createHash('md5').update(email + Date.now()).digest('hex');
     res.send(`Reset token: ${token}`);
+});
+
+// Server-Side Request Forgery (SSRF)
+app.get('/fetch-url', async (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: User input is used to make internal/external requests
+    try {
+        const response = await axios.get(url);
+        res.send(response.data);
+    } catch (error) {
+        res.status(500).send(`Error fetching URL: ${error.message}`);
+    }
+});
+
+// Prototype Pollution
+const merge = (target, source) => {
+    for (let key in source) {
+        if (key === '__proto__' || key === 'constructor') continue; // Simple guard, but easily bypassed in real scenarios if not recursive or complex enough
+        if (typeof target[key] === 'object' && typeof source[key] === 'object') {
+            merge(target[key], source[key]);
+        } else {
+            target[key] = source[key];
+        }
+    }
+    return target;
+};
+
+// VULNERABLE: Insecure merge implementation
+const insecureMerge = (target, source) => {
+    for (let key in source) {
+        target[key] = source[key]; // No protection against __proto__
+    }
+    return target;
+};
+
+app.post('/update-settings', (req, res) => {
+    const settings = {};
+    insecureMerge(settings, req.body);
+    res.json({ status: "settings updated", settings });
+});
+
+// Open Redirect
+app.get('/goto', (req, res) => {
+    const { url } = req.query;
+    // VULNERABLE: Unvalidated user input in redirect
+    res.redirect(url);
+});
+
+// Sensitive Data Exposure
+app.post('/payment', (req, res) => {
+    const { cardNumber, cvv, amount } = req.body;
+    // CRITICAL: Logging sensitive information to console
+    console.log(`Processing payment for ${cardNumber} (CVV: ${cvv}) for amount: ${amount}`);
+    res.json({ status: "payment processed" });
+});
+
+// Simulated NoSQL Injection
+app.post('/users/find', (req, res) => {
+    const { query } = req.body;
+    // VULNERABLE: Direct use of object in a way that mimics NoSQL injection (e.g., passing {$ne: null})
+    console.log("Simulating NoSQL query with:", JSON.stringify(query));
+    res.json({ message: "Search processed", results: [] });
 });
 
 app.listen(port, () => {
