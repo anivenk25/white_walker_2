@@ -11,9 +11,26 @@ const libxmljs = require('libxmljs2');
 const cookieParser = require('cookie-parser');
 const vm = require('vm');
 const https = require('https');
+const multer = require('multer');
+const path = require('path');
 
 const app = express();
 const port = 3000;
+
+// Multer configuration for insecure file upload
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public/uploads/');
+    },
+    filename: (req, file, cb) => {
+        // VULNERABLE: Keeping original name and extension
+        cb(null, file.originalname);
+    }
+});
+const upload = multer({ storage: storage });
+
+// VULNERABLE: No frame-protection headers (Clickjacking)
+// res.header("X-Frame-Options", "DENY"); // Missing
 
 // Security Misconfiguration: Disable security headers
 // app.disable('x-powered-by'); // This would be a good thing to do, but we are leaving it for demonstration

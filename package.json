@@ -15,6 +15,7 @@
     "express": "^4.16.3",
     "jsonwebtoken": "^9.0.3",
     "libxmljs2": "^0.37.0",
+    "multer": "^2.0.2",
     "sql.js": "^1.6.2"
   }
 }
