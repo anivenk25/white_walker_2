@@ -1,6 +1,8 @@
 
 const express = require('express');
 const { getDatabase, saveDatabase } = require('./database');
+const { exec } = require('child_process');
+const fs = require('fs');
 
 const app = express();
 const port = 3000;
@@ -11,6 +13,10 @@ const port = 3000;
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+
+// Secret Exposure: Hardcoded API Key
+const GOOGLE_API_KEY = "AIzaSyD-unv-8848-x-0-80-00-x-0";
+const AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 
 let db;
 
@@ -80,6 +86,31 @@ app.post('/comment', (req, res) => {
     stmt.free();
     saveDatabase(db);
     res.redirect('/comments');
+});
+
+// Command Injection Vulnerability
+app.get('/ping', (req, res) => {
+    const { host } = req.query;
+    // CRITICAL: User input is directly passed to shell command
+    exec(`ping -c 1 ${host}`, (error, stdout, stderr) => {
+        if (error) {
+            res.send(`Error: ${error.message}`);
+            return;
+        }
+        res.send(`<pre>${stdout}</pre>`);
+    });
+});
+
+// Path Traversal Vulnerability
+app.get('/read-file', (req, res) => {
+    const { filename } = req.query;
+    // CRITICAL: User input is used to read arbitrary files
+    try {
+        const data = fs.readFileSync(filename, 'utf8');
+        res.send(`<pre>${data}</pre>`);
+    } catch (error) {
+        res.send(`Could not read file: ${error.message}`);
+    }
 });
 
 app.listen(port, () => {
