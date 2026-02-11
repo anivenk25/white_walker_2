@@ -10,6 +10,7 @@ jobs:
     steps:
       - name: Trigger Longclaw Backend
         run: |
-          curl -X POST "${{ secrets.LONGCLAW_BACKEND_URL }}/analyze-github-pr" 
-          -H "Content-Type: application/json" 
-          -d "{"repo_name": "${{ github.repository }}", "pr_id": ${{ github.event.pull_request.number }}}"
+          BACKEND_URL=$(echo "${{ secrets.LONGCLAW_BACKEND_URL }}" | sed 's/\/$//')
+          curl -X POST "$BACKEND_URL/analyze-github-pr" \
+            -H "Content-Type: application/json" \
+            -d "{\"repo_name\": \"${{ github.repository }}\", \"pr_id\": ${{ github.event.pull_request.number }}}"
