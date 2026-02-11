@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Comments</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>Comments</h1>
+
+    <form action="/comment" method="POST">
+        <label for="comment">Add a comment:</label><br>
+        <textarea id="comment" name="comment" rows="4" cols="50"></textarea><br>
+        <button type="submit">Submit Comment</button>
+    </form>
+
+    <h2>Existing Comments:</h2>
+    <div id="comments-list">
+        <% if (comments && comments.length > 0) { %>
+            <% comments.forEach(function(comment) { %>
+                <p><%- comment[1] %></p>
+            <% }); %>
+        <% } else { %>
+            <p>No comments yet.</p>
+        <% } %>
+    </div>
+    <p>
+        This comment section is vulnerable to Stored XSS. Try posting a comment like <code>&lt;script&gt;alert('Stored XSS')&lt;/script&gt;</code>.
+    </p>
+    <p>
+        <a href="/">Back to login</a>
+    </p>
+</body>
+</html>

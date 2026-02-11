@@ -1,0 +1,22 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Profile</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>Profile</h1>
+    <p>ID: <%= user[0] %></p>
+    <p>Username: <%= user[1] %></p>
+    <p>Profile: <%- user[3] %></p> 
+
+    <p>
+        This page is vulnerable to Insecure Direct Object Reference (IDOR). Try changing the ID in the URL to view other user profiles.
+    </p>
+    <p>
+        <a href="/">Back to login</a>
+    </p>
+</body>
+</html>
