@@ -541,3 +541,48 @@ app.post('/deserialize-node', (req, res) => {
         res.status(400).send("Deserialization error: " + e.message);
     }
 });
+
+// --- ROUND 9 VULNERABILITIES ---
+
+// Host Header Injection / Password Reset Poisoning
+app.get('/password-reset-link', (req, res) => {
+    const { user } = req.query;
+    const token = crypto.randomBytes(8).toString('hex');
+    // VULNERABLE: Trusting Host header when constructing reset URL
+    const resetUrl = `${req.protocol}://${req.headers.host}/reset-password?user=${encodeURIComponent(user || '')}&token=${token}`;
+    res.json({ resetUrl });
+});
+
+// JSONP Endpoint (XSS)
+app.get('/jsonp', (req, res) => {
+    const { callback } = req.query;
+    const payload = { status: "ok", time: Date.now() };
+    // VULNERABLE: Unvalidated callback allows arbitrary JS execution
+    res.type('text/javascript');
+    res.send(`${callback}(${JSON.stringify(payload)})`);
+});
+
+// Arbitrary File Deletion
+app.post('/delete-file', (req, res) => {
+    const { target } = req.body;
+    // CRITICAL: User-controlled file path allows deleting arbitrary files
+    try {
+        fs.unlinkSync(target);
+        res.send(`Deleted file: ${target}`);
+    } catch (e) {
+        res.status(500).send(`Delete failed: ${e.message}`);
+    }
+});
+
+// Unsafe Dynamic Code Execution
+app.post('/calculate', (req, res) => {
+    const { expression } = req.body;
+    // CRITICAL: new Function executes arbitrary code
+    try {
+        const fn = new Function(`return (${expression})`);
+        const result = fn();
+        res.json({ result });
+    } catch (e) {
+        res.status(400).send("Invalid expression: " + e.message);
+    }
+});
