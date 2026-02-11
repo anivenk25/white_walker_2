@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const axios = require('axios');
 const libxmljs = require('libxmljs2');
 const cookieParser = require('cookie-parser');
+const vm = require('vm');
+const https = require('https');
 
 const app = express();
 const port = 3000;
@@ -19,7 +21,9 @@ app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static('public'));
+// VULNERABLE: Enabling directory listing by serving from the root
+app.use(express.static('.'));
+// app.use(express.static('public')); // This would be the secure way
 
 // Secret Exposure: Hardcoded API Key
 const GOOGLE_API_KEY = "AIzaSyD-unv-8848-x-0-80-00-x-0";
@@ -279,6 +283,58 @@ app.get('/set-session', (req, res) => {
     // VULNERABLE: Missing HttpOnly and Secure flags
     res.cookie('sessionId', '123456789', { expires: new Date(Date.now() + 900000) });
     res.send("Session cookie set");
+});
+
+// Sandbox Escape (vulnerable vm module usage)
+app.post('/run-code', (req, res) => {
+    const { code } = req.body;
+    // CRITICAL: vm.runInNewContext is not a robust sandbox
+    try {
+        const context = { result: null };
+        vm.runInNewContext(code, context);
+        res.json({ result: context.result });
+    } catch (e) {
+        res.status(400).send("Execution error: " + e.message);
+    }
+});
+
+// Insecure TLS Validation
+app.get('/fetch-insecure', async (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: Explicitly disabling TLS certificate checks
+    const agent = new https.Agent({
+        rejectUnauthorized: false
+    });
+    try {
+        const response = await axios.get(url, { httpsAgent: agent });
+        res.send(response.data);
+    } catch (error) {
+        res.status(500).send(`Error fetching URL: ${error.message}`);
+    }
+});
+
+// Mass Assignment
+app.post('/update-user-profile', (req, res) => {
+    const { userId } = req.body;
+    const user = { id: userId, username: "user1", isAdmin: false };
+    // VULNERABLE: Merging entire body allows overwriting sensitive fields like isAdmin
+    Object.assign(user, req.body);
+    res.json({ message: "User updated", user });
+});
+
+// Race Condition (Simulated)
+let balance = 1000;
+app.post('/transfer', (req, res) => {
+    const { amount } = req.body;
+    // VULNERABLE: Asynchronous delay between check and update
+    if (balance >= amount) {
+        setTimeout(() => {
+            balance -= amount;
+            res.json({ message: "Transfer successful", newBalance: balance });
+        }, 100); // Simulate processing time
+    } else {
+        res.status(400).send("Insufficient funds");
+    }
 });
 
 app.listen(port, () => {
