@@ -1,5 +1,6 @@
 
 const express = require('express');
+const ejs = require('ejs');
 const { getDatabase, saveDatabase } = require('./database');
 const { exec } = require('child_process');
 const fs = require('fs');
@@ -21,6 +22,14 @@ app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// VULNERABLE: Insecure CORS Configuration
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+});
+
 // VULNERABLE: Enabling directory listing by serving from the root
 app.use(express.static('.'));
 // app.use(express.static('public')); // This would be the secure way
@@ -335,6 +344,59 @@ app.post('/transfer', (req, res) => {
     } else {
         res.status(400).send("Insufficient funds");
     }
+});
+
+// Server-Side Template Injection (SSTI)
+app.get('/render', (req, res) => {
+    const { template, name } = req.query;
+    // CRITICAL: Rendering a template directly from user input
+    try {
+        const rendered = ejs.render(template || 'Hello <%= name %>', { name: name || 'Guest' });
+        res.send(rendered);
+    } catch (e) {
+        res.status(400).send("Template Error: " + e.message);
+    }
+});
+
+// HTTP Parameter Pollution (HPP)
+app.get('/user-lookup', (req, res) => {
+    const { id } = req.query;
+    // VULNERABLE: If 'id' is an array (e.g., ?id=1&id=2), it might cause logic errors
+    console.log("Looking up user with ID:", id);
+    const user = db.exec(`SELECT * FROM users WHERE id = ${id}`);
+    res.json({ user: user.length > 0 ? user[0].values : [] });
+});
+
+// Exposure of Sensitive System Information
+app.get('/config', (req, res) => {
+    // CRITICAL: Leaking internal configuration
+    res.json({
+        database: {
+            path: './database.sqlite',
+            type: 'sqlite3'
+        },
+        server: {
+            port: port,
+            env: process.env.NODE_ENV || 'development',
+            admin_secret: 'super-secret-internal-key'
+        }
+    });
+});
+
+// Improper Error Handling: Leaking stack traces
+app.get('/cause-error', (req, res) => {
+    throw new Error("This is a forced error to test error handling");
+});
+
+app.use((err, req, res, next) => {
+    // CRITICAL: Returning full stack trace and environment variables to the user
+    console.error(err.stack);
+    res.status(500).json({
+        message: "Internal Server Error",
+        error: err.message,
+        stack: err.stack,
+        environment: process.env
+    });
 });
 
 app.listen(port, () => {
