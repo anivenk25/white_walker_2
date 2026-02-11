@@ -3,6 +3,8 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('./database');
 const { exec } = require('child_process');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 const port = 3000;
@@ -111,6 +113,63 @@ app.get('/read-file', (req, res) => {
     } catch (error) {
         res.send(`Could not read file: ${error.message}`);
     }
+});
+
+// ReDoS (Regular Expression Denial of Service)
+app.get('/check-pattern', (req, res) => {
+    const { input } = req.query;
+    // VULNERABLE: Nested quantifiers can lead to exponential time complexity
+    const pattern = /^(a+)+$/;
+    const isMatch = pattern.test(input);
+    res.send(`Match result: ${isMatch}`);
+});
+
+// Insecure Deserialization using eval()
+app.post('/parse-config', (req, res) => {
+    const { config } = req.body;
+    // CRITICAL: eval() on user input is extremely dangerous
+    try {
+        const parsed = eval("(" + config + ")");
+        res.json({ status: "success", data: parsed });
+    } catch (e) {
+        res.status(400).send("Invalid config");
+    }
+});
+
+// Weak JWT Secret
+const JWT_SECRET = "secret"; // Hardcoded, weak secret
+app.post('/login-jwt', (req, res) => {
+    const { user } = req.body;
+    const token = jwt.sign({ user }, JWT_SECRET);
+    res.json({ token });
+});
+
+app.get('/verify-jwt', (req, res) => {
+    const token = req.headers['authorization'];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        res.json({ decoded });
+    } catch (err) {
+        res.status(401).send("Unauthorized");
+    }
+});
+
+// Broken Access Control
+app.get('/admin/delete-all', (req, res) => {
+    // VULNERABLE: Simple query param check for admin access
+    if (req.query.admin === 'true') {
+        res.send("All data deleted (simulated)");
+    } else {
+        res.status(403).send("Forbidden: Admins only");
+    }
+});
+
+// Insecure Cryptography: MD5 hashing
+app.get('/generate-token', (req, res) => {
+    const { email } = req.query;
+    // VULNERABLE: MD5 is considered broken for security purposes
+    const token = crypto.createHash('md5').update(email + Date.now()).digest('hex');
+    res.send(`Reset token: ${token}`);
 });
 
 app.listen(port, () => {
