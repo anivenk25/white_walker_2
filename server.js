@@ -416,6 +416,54 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Insecure File Upload
+app.post('/upload-profile-pic', upload.single('profilePic'), (req, res) => {
+    // CRITICAL: No file type validation, allows .js, .php, etc.
+    if (!req.file) {
+        return res.status(400).send("No file uploaded");
+    }
+    res.json({ message: "File uploaded successfully", path: req.file.path });
+});
+
+// Session Fixation
+const sessions = {};
+app.post('/login-session-fixation', (req, res) => {
+    const { username } = req.body;
+    let sessionId = req.cookies.sessionId;
+
+    // VULNERABLE: Not regenerating sessionId on login
+    if (!sessionId) {
+        sessionId = Math.random().toString(36).substring(2);
+        res.cookie('sessionId', sessionId);
+    }
+
+    sessions[sessionId] = { username, authenticated: true };
+    res.json({ message: "Logged in", sessionId });
+});
+
+// Denial of Service (Resource Exhaustion)
+app.get('/allocate-memory', (req, res) => {
+    const { size } = req.query;
+    // CRITICAL: Allocating memory based on user input
+    const bufferSize = parseInt(size) || 1024;
+    try {
+        const data = Buffer.alloc(bufferSize);
+        res.send(`Allocated ${data.length} bytes of memory`);
+    } catch (e) {
+        res.status(500).send("Allocation failed: " + e.message);
+    }
+});
+
+// Business Logic Flaw
+app.post('/checkout', (req, res) => {
+    const { items, total } = req.body;
+    // VULNERABLE: Not validating if total is positive or matches items price
+    if (total < 0) {
+        console.log("Negative total accepted! System exploited?");
+    }
+    res.json({ message: "Order processed", total });
+});
+
 app.listen(port, () => {
     console.log(`Vulnerable app listening at http://localhost:${port}`);
 });
