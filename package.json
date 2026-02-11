@@ -10,12 +10,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "axios": "^1.13.5",
     "ejs": "^3.1.6",
     "express": "^4.16.3",
+    "js-yaml": "^4.1.1",
     "jsonwebtoken": "^9.0.3",
     "libxmljs2": "^0.37.0",
     "multer": "^2.0.2",
+    "node-serialize": "^0.0.4",
     "sql.js": "^1.6.2"
   }
 }

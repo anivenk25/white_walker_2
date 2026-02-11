@@ -13,6 +13,9 @@ const vm = require('vm');
 const https = require('https');
 const multer = require('multer');
 const path = require('path');
+const yaml = require('js-yaml');
+const AdmZip = require('adm-zip');
+const serialize = require('node-serialize');
 
 const app = express();
 const port = 3000;
@@ -475,3 +478,66 @@ process.on('exit', () => {
     }
 });
 // Test trigger for security scan
+
+// --- ROUND 8 VULNERABILITIES ---
+
+// Log Injection
+app.get('/log-info', (req, res) => {
+    const { message } = req.query;
+    // VULNERABLE: User input is logged directly, allowing for log injection/forgery
+    console.log(`[INFO] User activity: ${message}`);
+    res.send("Activity logged");
+});
+
+// Insecure YAML Parsing
+app.post('/parse-yaml', (req, res) => {
+    const { yamlData } = req.body;
+    // CRITICAL: yaml.load() (or the old JS-YAML version) is vulnerable to code execution
+    try {
+        const doc = yaml.load(yamlData); // In older versions this was very dangerous
+        res.json({ status: "YAML parsed", data: doc });
+    } catch (e) {
+        res.status(400).send("Invalid YAML: " + e.message);
+    }
+});
+
+// Zip Slip Vulnerability
+app.post('/upload-zip', upload.single('zipFile'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).send("No zip file uploaded");
+    }
+
+    const zip = new AdmZip(req.file.path);
+    const zipEntries = zip.getEntries();
+
+    // CRITICAL: No validation on entry names, allowing path traversal (Zip Slip)
+    zipEntries.forEach(entry => {
+        const entryName = entry.entryName;
+        const targetPath = path.join('public/uploads/', entryName);
+        console.log(`Extracting ${entryName} to ${targetPath}`);
+        // In a real exploit, entryName could be '../../etc/passwd'
+        fs.writeFileSync(targetPath, entry.getData());
+    });
+
+    res.json({ message: "Zip extracted (potentially insecurely)" });
+});
+
+// Clickjacking - Explicitly vulnerable headers
+app.get('/frame-me', (req, res) => {
+    // VULNERABLE: Explicitly allowing framing from anywhere
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.send("<html><body><h1>This page can be framed!</h1></body></html>");
+});
+
+// Insecure Deserialization (Variant 2)
+app.post('/deserialize-node', (req, res) => {
+    const { data } = req.body;
+    // CRITICAL: node-serialize.unserialize is extremely dangerous
+    try {
+        const obj = serialize.unserialize(data);
+        res.json({ status: "Data deserialized", result: obj });
+    } catch (e) {
+        res.status(400).send("Deserialization error: " + e.message);
+    }
+});
