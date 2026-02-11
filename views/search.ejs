@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Users</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>Search Users</h1>
+    <form action="/search" method="POST">
+        <label for="query">Search:</label>
+        <input type="text" id="query" name="query" value="<%= typeof query !== 'undefined' ? query : '' %>"><br>
+        <button type="submit">Search</button>
+    </form>
+
+    <% if (results && results.length > 0) { %>
+        <h2>Results:</h2>
+        <ul>
+            <% results.forEach(function(user) { %>
+                <li>ID: <%= user[0] %>, Username: <%= user[1] %>, Profile: <%- user[3] %></li>
+            <% }); %>
+        </ul>
+    <% } else if (typeof query !== 'undefined') { %>
+        <p>No results found for "<%- query %>"</p>
+    <% } %>
+
+    <% if (typeof error !== 'undefined') { %>
+        <p style="color: red;">Error: <%= error %></p>
+    <% } %>
+
+    <p>
+        This search is vulnerable to SQL Injection in the search query and XSS in the displayed results.
+        Try searching for <code>' OR '1'='1</code> or <code>&lt;script&gt;alert('XSS')&lt;/script&gt;</code>.
+    </p>
+    <p>
+        <a href="/">Back to login</a>
+    </p>
+</body>
+</html>

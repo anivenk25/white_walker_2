@@ -1,0 +1,15 @@
+name: Longclaw Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Longclaw Backend
+        run: |
+          curl -X POST "${{ secrets.LONGCLAW_BACKEND_URL }}/analyze-github-pr" 
+          -H "Content-Type: application/json" 
+          -d "{"repo_name": "${{ github.repository }}", "pr_id": ${{ github.event.pull_request.number }}}"
