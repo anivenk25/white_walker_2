@@ -6,6 +6,8 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const axios = require('axios');
+const libxmljs = require('libxmljs2');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = 3000;
@@ -15,6 +17,8 @@ const port = 3000;
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cookieParser());
 app.use(express.static('public'));
 
 // Secret Exposure: Hardcoded API Key
@@ -233,6 +237,48 @@ app.post('/users/find', (req, res) => {
     // VULNERABLE: Direct use of object in a way that mimics NoSQL injection (e.g., passing {$ne: null})
     console.log("Simulating NoSQL query with:", JSON.stringify(query));
     res.json({ message: "Search processed", results: [] });
+});
+
+// XML External Entity (XXE)
+app.post('/upload-xml', (req, res) => {
+    const xmlData = req.body.xml;
+    // CRITICAL: libxmljs with noent: true allows external entities
+    try {
+        const xmlDoc = libxmljs.parseXml(xmlData, { noent: true, dtdload: true, dtdattr: true });
+        res.send(xmlDoc.toString());
+    } catch (e) {
+        res.status(400).send("Invalid XML: " + e.message);
+    }
+});
+
+// Insecure Randomness
+app.get('/generate-csrf-token', (req, res) => {
+    // VULNERABLE: Math.random() is not cryptographically secure
+    const token = Math.random().toString(36).substring(2);
+    res.json({ token });
+});
+
+// Lack of CSRF Protection
+app.post('/update-email', (req, res) => {
+    const { email } = req.body;
+    // VULNERABLE: Sensitive action with no CSRF token check
+    console.log(`Updating user email to: ${email}`);
+    res.json({ status: "success", email });
+});
+
+// HTTP Header Injection
+app.get('/set-header', (req, res) => {
+    const { name, value } = req.query;
+    // VULNERABLE: Directly setting headers from user input can lead to splitting/injection
+    res.set(name, value);
+    res.send(`Header ${name} set to ${value}`);
+});
+
+// Insecure Cookies
+app.get('/set-session', (req, res) => {
+    // VULNERABLE: Missing HttpOnly and Secure flags
+    res.cookie('sessionId', '123456789', { expires: new Date(Date.now() + 900000) });
+    res.send("Session cookie set");
 });
 
 app.listen(port, () => {
