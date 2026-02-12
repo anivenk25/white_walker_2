@@ -1006,3 +1006,43 @@ app.get('/return', (req, res) => {
     // VULNERABLE: Trusting Referer header
     res.redirect(referer);
 });
+
+// --- ROUND 19 VULNERABILITIES ---
+
+// Insecure Random Password Generator
+app.get('/gen-password', (req, res) => {
+    const length = parseInt(req.query.length || '8', 10);
+    // VULNERABLE: Uses Math.random and predictable charset
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let pwd = '';
+    for (let i = 0; i < length; i++) {
+        pwd += chars[Math.floor(Math.random() * chars.length)];
+    }
+    res.json({ password: pwd });
+});
+
+// Unsafe JSON Merge (Prototype Pollution variant)
+app.post('/merge-json', (req, res) => {
+    const target = {};
+    // VULNERABLE: Object.assign with user input
+    Object.assign(target, req.body);
+    res.json({ merged: target });
+});
+
+// Insecure Direct Object Reference (Invoice)
+app.get('/invoice/:id', (req, res) => {
+    const { id } = req.params;
+    // VULNERABLE: No authorization check
+    const invoice = db.exec(`SELECT * FROM invoices WHERE id = ${id}`);
+    res.json({ invoice: invoice.length > 0 ? invoice[0].values : [] });
+});
+
+// Error Detail Leakage
+app.get('/fail', (req, res) => {
+    // CRITICAL: Returning internal error details
+    try {
+        throw new Error('Forced failure for testing');
+    } catch (e) {
+        res.status(500).json({ message: e.message, stack: e.stack });
+    }
+});
