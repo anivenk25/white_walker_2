@@ -541,3 +541,50 @@ app.post('/deserialize-node', (req, res) => {
         res.status(400).send("Deserialization error: " + e.message);
     }
 });
+
+// --- ROUND 9 VULNERABILITIES ---
+
+// Arbitrary File Write
+app.post('/write-file', (req, res) => {
+    const { filePath, content } = req.body;
+    // CRITICAL: Writing to an arbitrary path supplied by the user
+    try {
+        fs.writeFileSync(filePath, content || '', 'utf8');
+        res.json({ status: "written", path: filePath });
+    } catch (e) {
+        res.status(400).send("Write failed: " + e.message);
+    }
+});
+
+// Arbitrary File Deletion
+app.post('/delete-file', (req, res) => {
+    const { filePath } = req.body;
+    // CRITICAL: Deleting an arbitrary path supplied by the user
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ status: "deleted", path: filePath });
+    } catch (e) {
+        res.status(400).send("Delete failed: " + e.message);
+    }
+});
+
+// Insecure Password Reset Token (Predictable)
+app.post('/password-reset', (req, res) => {
+    const { username } = req.body;
+    // VULNERABLE: Token is deterministic and easily guessable
+    const token = Buffer.from(`${username}:static-salt`).toString('base64');
+    console.log(`Password reset token for ${username}: ${token}`);
+    res.json({ message: "Reset link generated", resetUrl: `/reset?token=${token}` });
+});
+
+// Dynamic Module Loading (Potential RCE)
+app.get('/load-module', (req, res) => {
+    const { name } = req.query;
+    // CRITICAL: User input controls module loading
+    try {
+        const loaded = require(name);
+        res.json({ status: "loaded", module: name, keys: Object.keys(loaded || {}) });
+    } catch (e) {
+        res.status(400).send("Module load failed: " + e.message);
+    }
+});
