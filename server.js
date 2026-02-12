@@ -762,3 +762,48 @@ app.post('/parse-json', (req, res) => {
         res.status(400).send("Invalid JSON: " + e.message);
     }
 });
+
+// --- ROUND 14 VULNERABILITIES ---
+
+// Broken Access Control: Delete any user
+app.post('/users/delete', (req, res) => {
+    const { id } = req.body;
+    // VULNERABLE: No authentication/authorization checks
+    try {
+        db.exec(`DELETE FROM users WHERE id = ${id}`);
+        res.json({ status: "deleted", id });
+    } catch (e) {
+        res.status(400).send("Delete failed: " + e.message);
+    }
+});
+
+// Misconfigured CORS with Credentials (Reflects Origin)
+app.get('/cors-cred', (req, res) => {
+    // VULNERABLE: Reflecting Origin and allowing credentials
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.json({ message: "CORS enabled with credentials" });
+});
+
+// Insecure Cryptography: Static Key/IV Encryption
+app.get('/encrypt-token', (req, res) => {
+    const { data } = req.query;
+    // VULNERABLE: Hardcoded key and IV, predictable encryption
+    const key = Buffer.from('00000000000000000000000000000000', 'hex');
+    const iv = Buffer.from('11111111111111111111111111111111', 'hex');
+    try {
+        const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+        const encrypted = Buffer.concat([cipher.update(String(data || '')), cipher.final()]).toString('base64');
+        res.json({ encrypted });
+    } catch (e) {
+        res.status(500).send("Encryption failed: " + e.message);
+    }
+});
+
+// Sensitive Data Exposure via Logging
+app.post('/auth-debug', (req, res) => {
+    const { username, password } = req.body;
+    // VULNERABLE: Logging credentials in plaintext
+    console.log(`DEBUG AUTH: ${username} / ${password}`);
+    res.json({ status: "logged" });
+});
