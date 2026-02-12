@@ -1084,3 +1084,48 @@ app.get('/status-html', (req, res) => {
     // VULNERABLE: Returning unescaped HTML in a status page
     res.type('text/html').send(`<div>Status: ${msg}</div>`);
 });
+
+// --- ROUND 21 VULNERABILITIES ---
+
+// Broken Authorization: Admin action via query param
+app.post('/admin/action', (req, res) => {
+    const { admin } = req.query;
+    // VULNERABLE: Trusting query param for admin access
+    if (admin === 'true') {
+        res.json({ status: "admin action executed" });
+    } else {
+        res.status(403).send("Forbidden");
+    }
+});
+
+// Insecure File Write (Config overwrite)
+app.post('/config/write', (req, res) => {
+    const { path: filePath, data } = req.body;
+    // CRITICAL: User-controlled path and content
+    try {
+        fs.writeFileSync(filePath, data || '', 'utf8');
+        res.json({ status: "written", path: filePath });
+    } catch (e) {
+        res.status(400).send("Write failed: " + e.message);
+    }
+});
+
+// LDAP-style Injection (Simulated)
+app.get('/ldap', (req, res) => {
+    const { user } = req.query;
+    // VULNERABLE: Concatenating input into filter
+    const filter = `(&(uid=${user})(status=active))`;
+    res.json({ filter, result: [] });
+});
+
+// Unsafe YAML Deserialization (again)
+app.post('/yaml-unsafe', (req, res) => {
+    const { yamlText } = req.body;
+    // CRITICAL: yaml.load on untrusted input
+    try {
+        const obj = yaml.load(yamlText);
+        res.json({ parsed: obj });
+    } catch (e) {
+        res.status(400).send("YAML parse failed: " + e.message);
+    }
+});
