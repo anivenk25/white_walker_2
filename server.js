@@ -677,3 +677,42 @@ app.post('/logout-any', (req, res) => {
     delete sessions[sessionId];
     res.json({ message: "Session removed", sessionId });
 });
+
+// --- ROUND 12 VULNERABILITIES ---
+
+// Command Injection via system curl
+app.get('/sys-curl', (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: User input directly in shell command
+    exec(`curl ${url}`, (error, stdout, stderr) => {
+        if (error) {
+            res.status(500).send(`Error: ${error.message}`);
+            return;
+        }
+        res.send(`<pre>${stdout}</pre>`);
+    });
+});
+
+// Insecure Password Reset (Predictable Token)
+app.get('/reset-token', (req, res) => {
+    const { user } = req.query;
+    // VULNERABLE: Token derived from username and timestamp
+    const token = crypto.createHash('md5').update(`${user}-${Date.now()}`).digest('hex');
+    res.json({ user, token });
+});
+
+// Email Header Injection
+app.post('/send-email', (req, res) => {
+    const { to, subject } = req.body;
+    // VULNERABLE: Directly embedding user input in header string
+    const raw = `To: ${to}\r\nSubject: ${subject}\r\n\r\nHello`;
+    res.type('text/plain').send(raw);
+});
+
+// Insecure Object Reference (Order Details)
+app.get('/order/:orderId', (req, res) => {
+    const { orderId } = req.params;
+    // VULNERABLE: No authorization check
+    const order = db.exec(`SELECT * FROM orders WHERE id = ${orderId}`);
+    res.json({ order: order.length > 0 ? order[0].values : [] });
+});
