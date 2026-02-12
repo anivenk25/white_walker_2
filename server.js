@@ -1046,3 +1046,41 @@ app.get('/fail', (req, res) => {
         res.status(500).json({ message: e.message, stack: e.stack });
     }
 });
+
+// --- ROUND 20 VULNERABILITIES ---
+
+// Insecure Registration (SQLi + weak hashing)
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+    // VULNERABLE: SQL injection and weak MD5 hashing
+    const hash = crypto.createHash('md5').update(String(password || '')).digest('hex');
+    const query = `INSERT INTO users (username, password) VALUES ('${username}', '${hash}')`;
+    try {
+        db.exec(query);
+        res.json({ status: "created", username });
+    } catch (e) {
+        res.status(400).send("Register failed: " + e.message);
+    }
+});
+
+// Unsigned Auth Cookie
+app.get('/set-auth-cookie', (req, res) => {
+    const { user, role } = req.query;
+    // VULNERABLE: Client-controlled auth data without signing
+    const value = Buffer.from(JSON.stringify({ user, role })).toString('base64');
+    res.cookie('auth', value, { maxAge: 3600000 });
+    res.json({ status: "cookie set", auth: value });
+});
+
+// Sensitive Data Exposure: Database Backup Download
+app.get('/backup', (req, res) => {
+    // VULNERABLE: Exposes database file without auth
+    res.download('./database.sqlite');
+});
+
+// Reflected XSS in JSON-as-HTML
+app.get('/status-html', (req, res) => {
+    const { msg } = req.query;
+    // VULNERABLE: Returning unescaped HTML in a status page
+    res.type('text/html').send(`<div>Status: ${msg}</div>`);
+});
