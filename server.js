@@ -851,3 +851,43 @@ app.get('/load-module', (req, res) => {
         res.status(400).send("Module load failed: " + e.message);
     }
 });
+
+// --- ROUND 15 VULNERABILITIES ---
+
+// Trusting X-Forwarded-For for admin access
+app.get('/admin-ip', (req, res) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // VULNERABLE: Client can spoof X-Forwarded-For
+    if (ip === '127.0.0.1' || ip === '::1') {
+        res.send("Admin access granted (by IP)");
+    } else {
+        res.status(403).send("Forbidden");
+    }
+});
+
+// Local File Inclusion via template rendering
+app.get('/render-file', (req, res) => {
+    const { template } = req.query;
+    // CRITICAL: Rendering arbitrary file path as template
+    ejs.renderFile(template, { user: 'guest' }, (err, html) => {
+        if (err) {
+            res.status(400).send("Render failed: " + err.message);
+            return;
+        }
+        res.send(html);
+    });
+});
+
+// Sensitive Data Exposure: Export sessions
+app.get('/export-sessions', (req, res) => {
+    // VULNERABLE: Exposing in-memory session store
+    res.json({ sessions });
+});
+
+// Insecure Role Cookie
+app.post('/set-role', (req, res) => {
+    const { role } = req.body;
+    // VULNERABLE: Client-controlled role stored in cookie
+    res.cookie('role', role, { maxAge: 3600000 });
+    res.json({ status: "role set", role });
+});
