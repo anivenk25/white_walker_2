@@ -716,3 +716,49 @@ app.get('/order/:orderId', (req, res) => {
     const order = db.exec(`SELECT * FROM orders WHERE id = ${orderId}`);
     res.json({ order: order.length > 0 ? order[0].values : [] });
 });
+
+// --- ROUND 13 VULNERABILITIES ---
+
+// Open Proxy / SSRF via URL fetch
+app.get('/proxy', async (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: Proxying arbitrary URLs enables SSRF and open proxy abuse
+    try {
+        const response = await axios.get(url);
+        res.send(response.data);
+    } catch (e) {
+        res.status(500).send(`Proxy error: ${e.message}`);
+    }
+});
+
+// Insecure Caching of Sensitive Data
+app.get('/account', (req, res) => {
+    // VULNERABLE: Missing cache-control, may allow sensitive data to be cached
+    res.send("Account details: [sensitive data]");
+});
+
+// Reflected XSS via query param in HTML context
+app.get('/echo', (req, res) => {
+    const { q } = req.query;
+    // VULNERABLE: Directly reflecting unescaped input
+    res.send(`<h1>Echo: ${q}</h1>`);
+});
+
+// Insecure Deserialization with JSON.parse + reviver
+app.post('/parse-json', (req, res) => {
+    const { data } = req.body;
+    // CRITICAL: Reviver executing arbitrary code from input
+    try {
+        const parsed = JSON.parse(data, (key, value) => {
+            if (typeof value === 'string' && value.startsWith('js:')) {
+                // Dangerous: execute code embedded in JSON value
+                // eslint-disable-next-line no-eval
+                return eval(value.slice(3));
+            }
+            return value;
+        });
+        res.json({ parsed });
+    } catch (e) {
+        res.status(400).send("Invalid JSON: " + e.message);
+    }
+});
