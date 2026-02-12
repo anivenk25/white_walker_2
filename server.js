@@ -972,3 +972,37 @@ app.get('/weak-token', (req, res) => {
     const token = Math.random().toString(36).slice(2);
     res.json({ token });
 });
+
+// --- ROUND 18 VULNERABILITIES ---
+
+// Clickjacking with no frame protection
+app.get('/frame-any', (req, res) => {
+    // VULNERABLE: Explicitly allows framing
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.send('<h1>Frame me</h1>');
+});
+
+// Sensitive Data Exposure: Debug endpoint
+app.get('/debug-env', (req, res) => {
+    // VULNERABLE: Leaks environment variables
+    res.json({ env: process.env });
+});
+
+// Insecure Directory Listing
+app.get('/list-files', (req, res) => {
+    const { dir } = req.query;
+    // CRITICAL: Listing arbitrary directories
+    try {
+        const files = fs.readdirSync(dir || '.');
+        res.json({ dir, files });
+    } catch (e) {
+        res.status(400).send("List failed: " + e.message);
+    }
+});
+
+// Open Redirect via Referer
+app.get('/return', (req, res) => {
+    const referer = req.headers.referer || '/';
+    // VULNERABLE: Trusting Referer header
+    res.redirect(referer);
+});
