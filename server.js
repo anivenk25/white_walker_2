@@ -638,3 +638,42 @@ app.get('/load-module', (req, res) => {
         res.status(400).send("Load failed: " + e.message);
     }
 });
+
+// --- ROUND 11 VULNERABILITIES ---
+
+// HTTP Response Splitting (CRLF Injection)
+app.get('/redirect', (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: User-controlled Location header allows CRLF injection
+    res.setHeader('Location', url);
+    res.status(302).send('Redirecting...');
+});
+
+// LDAP Injection (Simulated)
+app.post('/ldap-search', (req, res) => {
+    const { username } = req.body;
+    // VULNERABLE: User input directly concatenated into LDAP filter
+    const filter = `(uid=${username})`;
+    res.json({ message: "LDAP query executed", filter });
+});
+
+// Insecure File Read via require() (Local File Inclusion)
+app.get('/include', (req, res) => {
+    const { file } = req.query;
+    // CRITICAL: Dynamic require on user-controlled path
+    try {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        const data = require(file);
+        res.json({ included: true, data });
+    } catch (e) {
+        res.status(400).send("Include failed: " + e.message);
+    }
+});
+
+// Insecure Session Logout (No auth check)
+app.post('/logout-any', (req, res) => {
+    const { sessionId } = req.body;
+    // VULNERABLE: Allows anyone to delete any session ID
+    delete sessions[sessionId];
+    res.json({ message: "Session removed", sessionId });
+});
