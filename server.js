@@ -586,3 +586,55 @@ app.post('/calculate', (req, res) => {
         res.status(400).send("Invalid expression: " + e.message);
     }
 });
+
+// --- ROUND 10 VULNERABILITIES ---
+
+// JWT Alg None / Signature Bypass
+app.post('/jwt-none', (req, res) => {
+    const { token } = req.body;
+    // CRITICAL: Decoding token without verifying signature
+    try {
+        const decoded = jwt.decode(token);
+        res.json({ decoded });
+    } catch (e) {
+        res.status(400).send("Invalid token: " + e.message);
+    }
+});
+
+// SQL Injection (Orders)
+app.get('/orders', (req, res) => {
+    const { id } = req.query;
+    // VULNERABLE: Direct string interpolation in SQL query
+    const query = `SELECT * FROM orders WHERE id = ${id}`;
+    try {
+        const orders = db.exec(query);
+        res.json({ orders: orders.length > 0 ? orders[0].values : [] });
+    } catch (e) {
+        res.status(400).send("Query error: " + e.message);
+    }
+});
+
+// Directory Traversal (Download)
+app.get('/download', (req, res) => {
+    const { file } = req.query;
+    // CRITICAL: User-controlled path allows traversal
+    const filePath = path.join(__dirname, file);
+    res.sendFile(filePath, err => {
+        if (err) {
+            res.status(404).send("File not found");
+        }
+    });
+});
+
+// Unsafe Dynamic Module Loading
+app.get('/load-module', (req, res) => {
+    const { name } = req.query;
+    // CRITICAL: Require with user-controlled input
+    try {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        const mod = require(name);
+        res.json({ loaded: true, type: typeof mod });
+    } catch (e) {
+        res.status(400).send("Load failed: " + e.message);
+    }
+});
