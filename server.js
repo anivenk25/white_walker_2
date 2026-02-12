@@ -544,6 +544,269 @@ app.post('/deserialize-node', (req, res) => {
 
 // --- ROUND 9 VULNERABILITIES ---
 
+// Host Header Injection / Password Reset Poisoning
+app.get('/password-reset-link', (req, res) => {
+    const { user } = req.query;
+    const token = crypto.randomBytes(8).toString('hex');
+    // VULNERABLE: Trusting Host header when constructing reset URL
+    const resetUrl = `${req.protocol}://${req.headers.host}/reset-password?user=${encodeURIComponent(user || '')}&token=${token}`;
+    res.json({ resetUrl });
+});
+
+// JSONP Endpoint (XSS)
+app.get('/jsonp', (req, res) => {
+    const { callback } = req.query;
+    const payload = { status: "ok", time: Date.now() };
+    // VULNERABLE: Unvalidated callback allows arbitrary JS execution
+    res.type('text/javascript');
+    res.send(`${callback}(${JSON.stringify(payload)})`);
+});
+
+// Arbitrary File Deletion
+app.post('/delete-file', (req, res) => {
+    const { target } = req.body;
+    // CRITICAL: User-controlled file path allows deleting arbitrary files
+    try {
+        fs.unlinkSync(target);
+        res.send(`Deleted file: ${target}`);
+    } catch (e) {
+        res.status(500).send(`Delete failed: ${e.message}`);
+    }
+});
+
+// Unsafe Dynamic Code Execution
+app.post('/calculate', (req, res) => {
+    const { expression } = req.body;
+    // CRITICAL: new Function executes arbitrary code
+    try {
+        const fn = new Function(`return (${expression})`);
+        const result = fn();
+        res.json({ result });
+    } catch (e) {
+        res.status(400).send("Invalid expression: " + e.message);
+    }
+});
+
+// --- ROUND 10 VULNERABILITIES ---
+
+// JWT Alg None / Signature Bypass
+app.post('/jwt-none', (req, res) => {
+    const { token } = req.body;
+    // CRITICAL: Decoding token without verifying signature
+    try {
+        const decoded = jwt.decode(token);
+        res.json({ decoded });
+    } catch (e) {
+        res.status(400).send("Invalid token: " + e.message);
+    }
+});
+
+// SQL Injection (Orders)
+app.get('/orders', (req, res) => {
+    const { id } = req.query;
+    // VULNERABLE: Direct string interpolation in SQL query
+    const query = `SELECT * FROM orders WHERE id = ${id}`;
+    try {
+        const orders = db.exec(query);
+        res.json({ orders: orders.length > 0 ? orders[0].values : [] });
+    } catch (e) {
+        res.status(400).send("Query error: " + e.message);
+    }
+});
+
+// Directory Traversal (Download)
+app.get('/download', (req, res) => {
+    const { file } = req.query;
+    // CRITICAL: User-controlled path allows traversal
+    const filePath = path.join(__dirname, file);
+    res.sendFile(filePath, err => {
+        if (err) {
+            res.status(404).send("File not found");
+        }
+    });
+});
+
+// Unsafe Dynamic Module Loading
+app.get('/load-module', (req, res) => {
+    const { name } = req.query;
+    // CRITICAL: Require with user-controlled input
+    try {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        const mod = require(name);
+        res.json({ loaded: true, type: typeof mod });
+    } catch (e) {
+        res.status(400).send("Load failed: " + e.message);
+    }
+});
+
+// --- ROUND 11 VULNERABILITIES ---
+
+// HTTP Response Splitting (CRLF Injection)
+app.get('/redirect', (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: User-controlled Location header allows CRLF injection
+    res.setHeader('Location', url);
+    res.status(302).send('Redirecting...');
+});
+
+// LDAP Injection (Simulated)
+app.post('/ldap-search', (req, res) => {
+    const { username } = req.body;
+    // VULNERABLE: User input directly concatenated into LDAP filter
+    const filter = `(uid=${username})`;
+    res.json({ message: "LDAP query executed", filter });
+});
+
+// Insecure File Read via require() (Local File Inclusion)
+app.get('/include', (req, res) => {
+    const { file } = req.query;
+    // CRITICAL: Dynamic require on user-controlled path
+    try {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        const data = require(file);
+        res.json({ included: true, data });
+    } catch (e) {
+        res.status(400).send("Include failed: " + e.message);
+    }
+});
+
+// Insecure Session Logout (No auth check)
+app.post('/logout-any', (req, res) => {
+    const { sessionId } = req.body;
+    // VULNERABLE: Allows anyone to delete any session ID
+    delete sessions[sessionId];
+    res.json({ message: "Session removed", sessionId });
+});
+
+// --- ROUND 12 VULNERABILITIES ---
+
+// Command Injection via system curl
+app.get('/sys-curl', (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: User input directly in shell command
+    exec(`curl ${url}`, (error, stdout, stderr) => {
+        if (error) {
+            res.status(500).send(`Error: ${error.message}`);
+            return;
+        }
+        res.send(`<pre>${stdout}</pre>`);
+    });
+});
+
+// Insecure Password Reset (Predictable Token)
+app.get('/reset-token', (req, res) => {
+    const { user } = req.query;
+    // VULNERABLE: Token derived from username and timestamp
+    const token = crypto.createHash('md5').update(`${user}-${Date.now()}`).digest('hex');
+    res.json({ user, token });
+});
+
+// Email Header Injection
+app.post('/send-email', (req, res) => {
+    const { to, subject } = req.body;
+    // VULNERABLE: Directly embedding user input in header string
+    const raw = `To: ${to}\r\nSubject: ${subject}\r\n\r\nHello`;
+    res.type('text/plain').send(raw);
+});
+
+// Insecure Object Reference (Order Details)
+app.get('/order/:orderId', (req, res) => {
+    const { orderId } = req.params;
+    // VULNERABLE: No authorization check
+    const order = db.exec(`SELECT * FROM orders WHERE id = ${orderId}`);
+    res.json({ order: order.length > 0 ? order[0].values : [] });
+});
+
+// --- ROUND 13 VULNERABILITIES ---
+
+// Open Proxy / SSRF via URL fetch
+app.get('/proxy', async (req, res) => {
+    const { url } = req.query;
+    // CRITICAL: Proxying arbitrary URLs enables SSRF and open proxy abuse
+    try {
+        const response = await axios.get(url);
+        res.send(response.data);
+    } catch (e) {
+        res.status(500).send(`Proxy error: ${e.message}`);
+    }
+});
+
+// Insecure Caching of Sensitive Data
+app.get('/account', (req, res) => {
+    // VULNERABLE: Missing cache-control, may allow sensitive data to be cached
+    res.send("Account details: [sensitive data]");
+});
+
+// Reflected XSS via query param in HTML context
+app.get('/echo', (req, res) => {
+    const { q } = req.query;
+    // VULNERABLE: Directly reflecting unescaped input
+    res.send(`<h1>Echo: ${q}</h1>`);
+});
+
+// Insecure Deserialization with JSON.parse + reviver
+app.post('/parse-json', (req, res) => {
+    const { data } = req.body;
+    // CRITICAL: Reviver executing arbitrary code from input
+    try {
+        const parsed = JSON.parse(data, (key, value) => {
+            if (typeof value === 'string' && value.startsWith('js:')) {
+                // Dangerous: execute code embedded in JSON value
+                // eslint-disable-next-line no-eval
+                return eval(value.slice(3));
+            }
+            return value;
+        });
+        res.json({ parsed });
+    } catch (e) {
+        res.status(400).send("Invalid JSON: " + e.message);
+    }
+});
+
+// --- ROUND 14 VULNERABILITIES ---
+
+// Broken Access Control: Delete any user
+app.post('/users/delete', (req, res) => {
+    const { id } = req.body;
+    // VULNERABLE: No authentication/authorization checks
+    try {
+        db.exec(`DELETE FROM users WHERE id = ${id}`);
+        res.json({ status: "deleted", id });
+    } catch (e) {
+        res.status(400).send("Delete failed: " + e.message);
+    }
+});
+
+// Misconfigured CORS with Credentials (Reflects Origin)
+app.get('/cors-cred', (req, res) => {
+    // VULNERABLE: Reflecting Origin and allowing credentials
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.json({ message: "CORS enabled with credentials" });
+});
+
+// Insecure Cryptography: Static Key/IV Encryption
+app.get('/encrypt-token', (req, res) => {
+    const { data } = req.query;
+    // VULNERABLE: Hardcoded key and IV, predictable encryption
+    const key = Buffer.from('00000000000000000000000000000000', 'hex');
+    const iv = Buffer.from('11111111111111111111111111111111', 'hex');
+    try {
+        const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+        const encrypted = Buffer.concat([cipher.update(String(data || '')), cipher.final()]).toString('base64');
+        res.json({ encrypted });
+    } catch (e) {
+        res.status(500).send("Encryption failed: " + e.message);
+    }
+});
+
+// Sensitive Data Exposure via Logging
+app.post('/auth-debug', (req, res) => {
+    const { username, password } = req.body;
+    // VULNERABLE: Logging credentials in plaintext
+    console.log(`DEBUG AUTH: ${username} / ${password}`);
+    res.json({ status: "logged" });
+});
 // Arbitrary File Write
 app.post('/write-file', (req, res) => {
     const { filePath, content } = req.body;
@@ -586,5 +849,200 @@ app.get('/load-module', (req, res) => {
         res.json({ status: "loaded", module: name, keys: Object.keys(loaded || {}) });
     } catch (e) {
         res.status(400).send("Module load failed: " + e.message);
+    }
+});
+
+// --- ROUND 15 VULNERABILITIES ---
+
+// Trusting X-Forwarded-For for admin access
+app.get('/admin-ip', (req, res) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // VULNERABLE: Client can spoof X-Forwarded-For
+    if (ip === '127.0.0.1' || ip === '::1') {
+        res.send("Admin access granted (by IP)");
+    } else {
+        res.status(403).send("Forbidden");
+    }
+});
+
+// Local File Inclusion via template rendering
+app.get('/render-file', (req, res) => {
+    const { template } = req.query;
+    // CRITICAL: Rendering arbitrary file path as template
+    ejs.renderFile(template, { user: 'guest' }, (err, html) => {
+        if (err) {
+            res.status(400).send("Render failed: " + err.message);
+            return;
+        }
+        res.send(html);
+    });
+});
+
+// Sensitive Data Exposure: Export sessions
+app.get('/export-sessions', (req, res) => {
+    // VULNERABLE: Exposing in-memory session store
+    res.json({ sessions });
+});
+
+// Insecure Role Cookie
+app.post('/set-role', (req, res) => {
+    const { role } = req.body;
+    // VULNERABLE: Client-controlled role stored in cookie
+    res.cookie('role', role, { maxAge: 3600000 });
+    res.json({ status: "role set", role });
+});
+
+// --- ROUND 16 VULNERABILITIES ---
+
+// Unvalidated Redirect with Token Leak
+app.get('/go-auth', (req, res) => {
+    const { next, token } = req.query;
+    // VULNERABLE: Redirecting to arbitrary URL while leaking token
+    res.redirect(`${next}?token=${encodeURIComponent(token || '')}`);
+});
+
+// Insecure File Upload (Executable content)
+app.post('/upload-any', upload.single('file'), (req, res) => {
+    // CRITICAL: No validation of file type or size
+    if (!req.file) {
+        return res.status(400).send("No file uploaded");
+    }
+    res.json({ message: "Uploaded", filename: req.file.filename, path: req.file.path });
+});
+
+// SSRF via IP allowlist bypass (partial)
+app.get('/fetch-internal', async (req, res) => {
+    const { url } = req.query;
+    // VULNERABLE: Naive allowlist check that can be bypassed
+    if (!url || !url.startsWith('http')) {
+        return res.status(400).send("Invalid URL");
+    }
+    try {
+        const response = await axios.get(url);
+        res.send(response.data);
+    } catch (e) {
+        res.status(500).send("Fetch failed: " + e.message);
+    }
+});
+
+// Client-Side Authorization (Insecure)
+app.get('/admin/client-check', (req, res) => {
+    const { role } = req.query;
+    // VULNERABLE: Trusting client-supplied role
+    if (role === 'admin') {
+        res.send("Admin panel (client-verified)");
+    } else {
+        res.status(403).send("Forbidden");
+    }
+});
+
+// --- ROUND 17 VULNERABILITIES ---
+
+// Cache Poisoning via Host header reflection
+app.get('/cache-me', (req, res) => {
+    // VULNERABLE: Reflecting Host header into response
+    const host = req.headers.host || 'unknown';
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.send(`<p>Cached for host: ${host}</p>`);
+});
+
+// Insecure Download (Path Traversal)
+app.get('/download-any', (req, res) => {
+    const { path: filePath } = req.query;
+    // CRITICAL: User-controlled path used directly
+    res.download(filePath, err => {
+        if (err) {
+            res.status(404).send("Download failed");
+        }
+    });
+});
+
+// Regex DoS (Catastrophic backtracking)
+app.post('/regex-test', (req, res) => {
+    const { input } = req.body;
+    // VULNERABLE: Nested quantifiers
+    const pattern = /^([a-zA-Z]+)+$/;
+    const ok = pattern.test(input || '');
+    res.json({ ok });
+});
+
+// Insecure Token Generation (Predictable)
+app.get('/weak-token', (req, res) => {
+    // VULNERABLE: Using Math.random for tokens
+    const token = Math.random().toString(36).slice(2);
+    res.json({ token });
+});
+
+// --- ROUND 18 VULNERABILITIES ---
+
+// Clickjacking with no frame protection
+app.get('/frame-any', (req, res) => {
+    // VULNERABLE: Explicitly allows framing
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.send('<h1>Frame me</h1>');
+});
+
+// Sensitive Data Exposure: Debug endpoint
+app.get('/debug-env', (req, res) => {
+    // VULNERABLE: Leaks environment variables
+    res.json({ env: process.env });
+});
+
+// Insecure Directory Listing
+app.get('/list-files', (req, res) => {
+    const { dir } = req.query;
+    // CRITICAL: Listing arbitrary directories
+    try {
+        const files = fs.readdirSync(dir || '.');
+        res.json({ dir, files });
+    } catch (e) {
+        res.status(400).send("List failed: " + e.message);
+    }
+});
+
+// Open Redirect via Referer
+app.get('/return', (req, res) => {
+    const referer = req.headers.referer || '/';
+    // VULNERABLE: Trusting Referer header
+    res.redirect(referer);
+});
+
+// --- ROUND 19 VULNERABILITIES ---
+
+// Insecure Random Password Generator
+app.get('/gen-password', (req, res) => {
+    const length = parseInt(req.query.length || '8', 10);
+    // VULNERABLE: Uses Math.random and predictable charset
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let pwd = '';
+    for (let i = 0; i < length; i++) {
+        pwd += chars[Math.floor(Math.random() * chars.length)];
+    }
+    res.json({ password: pwd });
+});
+
+// Unsafe JSON Merge (Prototype Pollution variant)
+app.post('/merge-json', (req, res) => {
+    const target = {};
+    // VULNERABLE: Object.assign with user input
+    Object.assign(target, req.body);
+    res.json({ merged: target });
+});
+
+// Insecure Direct Object Reference (Invoice)
+app.get('/invoice/:id', (req, res) => {
+    const { id } = req.params;
+    // VULNERABLE: No authorization check
+    const invoice = db.exec(`SELECT * FROM invoices WHERE id = ${id}`);
+    res.json({ invoice: invoice.length > 0 ? invoice[0].values : [] });
+});
+
+// Error Detail Leakage
+app.get('/fail', (req, res) => {
+    // CRITICAL: Returning internal error details
+    try {
+        throw new Error('Forced failure for testing');
+    } catch (e) {
+        res.status(500).json({ message: e.message, stack: e.stack });
     }
 });
