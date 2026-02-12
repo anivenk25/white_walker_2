@@ -935,3 +935,40 @@ app.get('/admin/client-check', (req, res) => {
         res.status(403).send("Forbidden");
     }
 });
+
+// --- ROUND 17 VULNERABILITIES ---
+
+// Cache Poisoning via Host header reflection
+app.get('/cache-me', (req, res) => {
+    // VULNERABLE: Reflecting Host header into response
+    const host = req.headers.host || 'unknown';
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.send(`<p>Cached for host: ${host}</p>`);
+});
+
+// Insecure Download (Path Traversal)
+app.get('/download-any', (req, res) => {
+    const { path: filePath } = req.query;
+    // CRITICAL: User-controlled path used directly
+    res.download(filePath, err => {
+        if (err) {
+            res.status(404).send("Download failed");
+        }
+    });
+});
+
+// Regex DoS (Catastrophic backtracking)
+app.post('/regex-test', (req, res) => {
+    const { input } = req.body;
+    // VULNERABLE: Nested quantifiers
+    const pattern = /^([a-zA-Z]+)+$/;
+    const ok = pattern.test(input || '');
+    res.json({ ok });
+});
+
+// Insecure Token Generation (Predictable)
+app.get('/weak-token', (req, res) => {
+    // VULNERABLE: Using Math.random for tokens
+    const token = Math.random().toString(36).slice(2);
+    res.json({ token });
+});
