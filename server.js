@@ -891,3 +891,47 @@ app.post('/set-role', (req, res) => {
     res.cookie('role', role, { maxAge: 3600000 });
     res.json({ status: "role set", role });
 });
+
+// --- ROUND 16 VULNERABILITIES ---
+
+// Unvalidated Redirect with Token Leak
+app.get('/go-auth', (req, res) => {
+    const { next, token } = req.query;
+    // VULNERABLE: Redirecting to arbitrary URL while leaking token
+    res.redirect(`${next}?token=${encodeURIComponent(token || '')}`);
+});
+
+// Insecure File Upload (Executable content)
+app.post('/upload-any', upload.single('file'), (req, res) => {
+    // CRITICAL: No validation of file type or size
+    if (!req.file) {
+        return res.status(400).send("No file uploaded");
+    }
+    res.json({ message: "Uploaded", filename: req.file.filename, path: req.file.path });
+});
+
+// SSRF via IP allowlist bypass (partial)
+app.get('/fetch-internal', async (req, res) => {
+    const { url } = req.query;
+    // VULNERABLE: Naive allowlist check that can be bypassed
+    if (!url || !url.startsWith('http')) {
+        return res.status(400).send("Invalid URL");
+    }
+    try {
+        const response = await axios.get(url);
+        res.send(response.data);
+    } catch (e) {
+        res.status(500).send("Fetch failed: " + e.message);
+    }
+});
+
+// Client-Side Authorization (Insecure)
+app.get('/admin/client-check', (req, res) => {
+    const { role } = req.query;
+    // VULNERABLE: Trusting client-supplied role
+    if (role === 'admin') {
+        res.send("Admin panel (client-verified)");
+    } else {
+        res.status(403).send("Forbidden");
+    }
+});
